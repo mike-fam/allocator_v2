@@ -20,4 +20,4 @@ jobs:
           eval $(ssh-agent)
           printf '%s\n' 'Host *.eait.uq.edu.au' '  StrictHostKeyChecking no' 'Host *.zones.eait.uq.edu.au' '  ProxyJump ${{ secrets.USER }}@moss.labs.eait.uq.edu.au' > "$SSH_PATH/config"
           ssh-add "$SSH_PATH/deploy_key"
-          ssh -i "$SSH_PATH/deploy_key" ${{ secrets.USER }}@${{ secrets.HOST }} "cd {{ secrets.PATH }} && git reset HEAD --hard && git checkout main && git pull && source venv/bin/activate && pip install -r requirements.txt && echo "${{ secrets.PW }}" | sudo -S systemctl restart uwsgi-allocator && history -c"
+          ssh -i "$SSH_PATH/deploy_key" ${{ secrets.USER }}@${{ secrets.HOST }} "cd /var/www/uwsgi/allocator_v2 && git reset HEAD --hard && git checkout main && git pull && source venv/bin/activate && pip install -r requirements.txt && echo "${{ secrets.PW }}" | sudo -S systemctl restart uwsgi-allocator && history -c"
