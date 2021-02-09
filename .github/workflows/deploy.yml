@@ -1,0 +1,23 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Deploy
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Deployment
+        run: |
+          SSH_PATH="$HOME/.ssh" && mkdir -p "$SSH_PATH" && touch "$SSH_PATH/known_hosts"
+          echo "${{ secrets.PRIVATE_KEY }}" > "$SSH_PATH/deploy_key"
+          chmod 700 "$SSH_PATH" && chmod 600 "$SSH_PATH/known_hosts" "$SSH_PATH/deploy_key"
+          eval $(ssh-agent)
+          printf '%s\n' 'Host *.eait.uq.edu.au' '  StrictHostKeyChecking no' 'Host *.zones.eait.uq.edu.au' '  ProxyJump ${{ secrets.USER }}@moss.labs.eait.uq.edu.au' > "$SSH_PATH/config"
+          ssh-add "$SSH_PATH/deploy_key"
+          ssh -i "$SSH_PATH/deploy_key" ${{ secrets.USER }}@${{ secrets.HOST }} "cd {{ secrets.PATH }} && git reset HEAD --hard && git checkout main && git pull && source venv/bin/activate && pip install -r requirements.txt && echo "${{ secrets.PW }}" | sudo -S systemctl restart uwsgi-allocator && history -c"
