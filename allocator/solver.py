@@ -183,6 +183,8 @@ class Solver:
                 key=lambda stream_id: (self._session_streams[stream_id].time.start,
                                        self._session_streams[stream_id].time.end)
             )
+            if len(allocated_streams) == 0:
+                continue
             streams_to_check = [(0, allocated_streams[0])]
             while len(streams_to_check) != 0:
                 first_stream_index, first_stream_id = streams_to_check.pop(0)
