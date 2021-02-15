@@ -314,21 +314,36 @@ class Solver:
                 absolute_values[tutor_id] == abs_(differences[tutor_id]))
         spread = quicksum(
             absolute_values[tutor_id] for tutor_id in self._real_tutors)
+        # self._model.ModelSense = GRB.MINIMIZE
+        # self._model.setObjectiveN(spread, 0, priority=0)
+        # self._model.setObjectiveN(
+        #     quicksum(self._allocation_var[tutor_id, session_stream_id] *
+        #              session_stream.time.duration() *
+        #              len(session_stream.weeks)
+        #              for tutor_id in self._dummy_tutors
+        #              for session_stream_id, session_stream in
+        #              self._session_streams.items()), 1,
+        #     priority=1, weight=3
+        # )
+        # self._model.setObjectiveN(
+        #     quicksum(self._tutor_on_day_var[tutor_id, day_id]
+        #              for tutor_id in self._real_tutors
+        #              for day_id in self._days), 2, priority=2, weight=2)
         self._model.ModelSense = GRB.MINIMIZE
+        self._model.setObjectiveN(spread, 0, priority=2)
+        self._model.setObjectiveN(
+            quicksum(self._tutor_on_day_var[tutor_id, day_id]
+                     for tutor_id in self._real_tutors
+                     for day_id in self._days), 1, priority=1)
         self._model.setObjectiveN(
             quicksum(self._allocation_var[tutor_id, session_stream_id] *
                      session_stream.time.duration() *
                      len(session_stream.weeks)
                      for tutor_id in self._dummy_tutors
                      for session_stream_id, session_stream in
-                     self._session_streams.items()), 0,
-            priority=0, weight=3
+                     self._session_streams.items()), 2,
+            priority=1, weight=3
         )
-        self._model.setObjectiveN(spread, 1, priority=1)
-        self._model.setObjectiveN(
-            quicksum(self._tutor_on_day_var[tutor_id, day_id]
-                     for tutor_id in self._real_tutors
-                     for day_id in self._days), 2, priority=2, weight=2)
 
     def solve(self, output_log_file=""):
         # TODO: Binary search for optimal spread hours constraint (currently set to 2).
