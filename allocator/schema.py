@@ -115,6 +115,16 @@ class Staff:
                                                          timeslots_input))
         return instance
 
+    @classmethod
+    def create_dummy(cls, dummy_id: int) -> 'Staff':
+        availabilities = {}
+        for day in [IsoDay.MON, IsoDay.THU, IsoDay.WED, IsoDay.THU,
+                    IsoDay.FRI]:
+            availabilities[day] = [Timeslot(Hour(1), Hour(23))]
+        instance = cls(dummy_id, f"Dummy {dummy_id}", False)
+        instance.availabilities = availabilities
+        return instance
+
 
 @dataclass(eq=True)
 class SessionStream:

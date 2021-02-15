@@ -37,7 +37,7 @@ class Allocator:
     def from_input(cls, json_input: InputData):
         instance = cls()
         instance._weeks = [Week.from_input(week_input) for week_input in json_input["weeks"]]
-        instance._new_threshold = json_input["new_threshold"] or 0.5
+        instance._new_threshold = json_input["new_threshold"] or 1
         instance._staff = [Staff.from_input(staff_input) for staff_input in json_input["staff"]]
         instance._session_streams = [SessionStream.from_input(session_stream_input) for session_stream_input in
                                      json_input["session_streams"]]
@@ -45,17 +45,21 @@ class Allocator:
 
     def run_allocation(self):
         start_time = time.time()
-        solver = Solver(self._staff,
-                        self._session_streams,
-                        self._weeks)
-        status = solver.solve()
-        response_status, type_, message = STATUSES[status]
-        if status != GRB.OPTIMAL:
-            allocations = {}
-        else:
-            allocations = solver.get_results()
-            message = message.format(time=datetime.now().strftime("%I:%M %p on %d %b %Y"))
-
+        current_dummy = -1
+        dummies = []
+        while True:
+            solver = Solver([*self._staff, *dummies],
+                            self._session_streams,
+                            self._weeks)
+            status = solver.solve()
+            response_status, type_, message = STATUSES[status]
+            if status == GRB.OPTIMAL:
+                allocations = solver.get_results()
+                message = message.format(time=datetime.now().strftime("%I:%M %p on %d %b %Y"))
+                break
+            dummies.append(Staff.create_dummy(current_dummy))
+            current_dummy -= 1
+            print("Appending dummy, current number of dummies:", -current_dummy)
         # Write to file
         return {
             "status": response_status,
