@@ -145,11 +145,11 @@ class Solver:
         for session_stream_id in self._session_streams:
             self._model.addConstr(
                 quicksum(self._allocation_var[tutor_id, session_stream_id]
-                         for tutor_id in self._real_tutors) - 1 >=
+                         for tutor_id in self._tutors) - 1 >=
                 quicksum(
                     self._allocation_var[tutor_id, session_stream_id] * int(
                         tutor.new)
-                    for tutor_id, tutor in self._real_tutors.items())
+                    for tutor_id, tutor in self._tutors.items())
             )
 
     def _setup_tutor_availability_constraint(self):
@@ -283,6 +283,7 @@ class Solver:
         We want to minimize the variance, so people will have maximum spread.
         Weights for new staff will be accounted here.
         """
+        # dict containing total number of allocated hours of every tutor
         total_hours = {
             tutor_id:
                 quicksum(
@@ -296,54 +297,51 @@ class Solver:
                 )
             for tutor_id, tutor in self._real_tutors.items()
         }
+        # mean of number of allocated hours for every tutor
         mean_hours = sum(
             session_stream.time.duration() *
             session_stream.number_of_tutors *
             len(session_stream.weeks)
             for session_stream in self._session_streams.values()
         ) / len(self._real_tutors)
+
+        # Difference between allocated hours and mean hours for every tutor
         differences = {tutor_id: self._model.addVar(lb=-GRB.INFINITY) for
                        tutor_id in self._real_tutors}
-        absolute_values = {tutor_id: self._model.addVar() for tutor_id in
-                           self._real_tutors}
 
+        # Absolute variance between allocated hours and mean hours
+        absolute_variances = {tutor_id: self._model.addVar() for tutor_id in
+                              self._real_tutors}
+
+        # Link difference and absolute variances
         for tutor_id in self._real_tutors:
             self._model.addConstr(
                 total_hours[tutor_id] - differences[tutor_id] == mean_hours)
             self._model.addConstr(
-                absolute_values[tutor_id] == abs_(differences[tutor_id]))
-        spread = quicksum(
-            absolute_values[tutor_id] for tutor_id in self._real_tutors)
-        # self._model.ModelSense = GRB.MINIMIZE
-        # self._model.setObjectiveN(spread, 0, priority=0)
-        # self._model.setObjectiveN(
-        #     quicksum(self._allocation_var[tutor_id, session_stream_id] *
-        #              session_stream.time.duration() *
-        #              len(session_stream.weeks)
-        #              for tutor_id in self._dummy_tutors
-        #              for session_stream_id, session_stream in
-        #              self._session_streams.items()), 1,
-        #     priority=1, weight=3
-        # )
-        # self._model.setObjectiveN(
-        #     quicksum(self._tutor_on_day_var[tutor_id, day_id]
-        #              for tutor_id in self._real_tutors
-        #              for day_id in self._days), 2, priority=2, weight=2)
+                absolute_variances[tutor_id] == abs_(differences[tutor_id]))
+
         self._model.ModelSense = GRB.MINIMIZE
-        self._model.setObjectiveN(spread, 0, priority=2)
+
+        # minimize amount of hours allocated to dummy tutors
+        dummy_hours = quicksum(
+            self._allocation_var[tutor_id, session_stream_id] *
+            session_stream.time.duration() *
+            len(session_stream.weeks)
+            for tutor_id in self._dummy_tutors
+            for session_stream_id, session_stream in
+            self._session_streams.items())
+        self._model.setObjectiveN(dummy_hours, 0, priority=2)
+
+        # Minimize absolute variances between tutors
+        spread = quicksum(
+            absolute_variances[tutor_id] for tutor_id in self._real_tutors)
+        self._model.setObjectiveN(spread, 1, priority=1)
+
+        # Minimize number of days tutors have to go to work
         self._model.setObjectiveN(
             quicksum(self._tutor_on_day_var[tutor_id, day_id]
                      for tutor_id in self._real_tutors
-                     for day_id in self._days), 1, priority=1)
-        self._model.setObjectiveN(
-            quicksum(self._allocation_var[tutor_id, session_stream_id] *
-                     session_stream.time.duration() *
-                     len(session_stream.weeks)
-                     for tutor_id in self._dummy_tutors
-                     for session_stream_id, session_stream in
-                     self._session_streams.items()), 2,
-            priority=1, weight=3
-        )
+                     for day_id in self._days), 2, priority=0)
 
     def solve(self, output_log_file=""):
         # TODO: Binary search for optimal spread hours constraint (currently set to 2).
