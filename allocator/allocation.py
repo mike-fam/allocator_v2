@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from .types import InputData
-from .schema import Staff, SessionStream, Week, Hour, Timeslot
+from .schema import Staff, SessionStream, Week
 from .solver import Solver
 
 from gurobipy.gurobipy import GRB
@@ -36,30 +36,27 @@ class Allocator:
     @classmethod
     def from_input(cls, json_input: InputData):
         instance = cls()
-        instance._weeks = [Week.from_input(week_input) for week_input in json_input["weeks"]]
+        instance._weeks = [Week.from_input(week_input)
+                           for week_input in json_input["weeks"]]
         instance._new_threshold = json_input["new_threshold"] or 1
-        instance._staff = [Staff.from_input(staff_input) for staff_input in json_input["staff"]]
-        instance._session_streams = [SessionStream.from_input(session_stream_input) for session_stream_input in
+        instance._staff = [Staff.from_input(staff_input)
+                           for staff_input in json_input["staff"]]
+        instance._session_streams = [SessionStream.from_input(stream_input)
+                                     for stream_input in
                                      json_input["session_streams"]]
         return instance
 
     def run_allocation(self):
         start_time = time.time()
-        current_dummy = -1
-        dummies = []
-        while True:
-            solver = Solver([*self._staff, *dummies],
-                            self._session_streams,
-                            self._weeks)
-            status = solver.solve()
-            response_status, type_, message = STATUSES[status]
-            if status == GRB.OPTIMAL:
-                allocations = solver.get_results()
-                message = message.format(time=datetime.now().strftime("%I:%M %p on %d %b %Y"))
-                break
-            dummies.append(Staff.create_dummy(current_dummy))
-            current_dummy -= 1
-            print("Appending dummy, current number of dummies:", -current_dummy)
+        solver = Solver(self._staff,
+                        self._session_streams,
+                        self._weeks)
+        status = solver.solve()
+        response_status, type_, message = STATUSES[status]
+        allocations = {}
+        if status == GRB.OPTIMAL:
+            allocations = solver.get_results()
+            message = message.format(time=datetime.now().strftime("%I:%M %p on %d %b %Y"))
         # Write to file
         return {
             "status": response_status,

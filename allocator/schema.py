@@ -70,7 +70,7 @@ class Timeslot:
 
 @dataclass
 class Staff:
-    id: int
+    id: str
     name: str
     new: bool
     type_preference: SessionType = None
@@ -128,7 +128,7 @@ class Staff:
 
 @dataclass(eq=True)
 class SessionStream:
-    id: int
+    id: str
     name: str
     type: SessionType  # e.g. 'Practical' or 'Tutorial'
     day: IsoDay
@@ -152,3 +152,6 @@ class SessionStream:
         day = session_stream_input["day"]
         weeks = session_stream_input["weeks"]
         return cls(id_, name, type_, day, timeslot, number_of_tutors, weeks)
+
+    def total_hours(self):
+        return self.time.duration() * len(self.weeks)

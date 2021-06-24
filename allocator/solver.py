@@ -5,18 +5,20 @@ from gurobipy.gurobipy import GRB, quicksum, Model, abs_
 
 from .schema import *
 
-# Used for preference constraint. E.g. 0.8 means, if a tutor's preference is practical
-# sessions, they'll get AT LEAST 4 hours of practicals for every hour of any other session.
-# Higher values may lead to infeasibility, value must be > 1/types_num for preferencing to work,
-# where types_num is the number of session types (e.g. 2 if session types include Prac and Tute)
+# Used for preference constraint. E.g. 0.8 means, if a tutor's preference is
+# practical sessions, they'll get AT LEAST 4 hours of practicals for every hour
+# of any other session. Higher values may lead to infeasibility, value must be
+# > 1/types_num for preferencing to work, where types_num is the number of
+# session types (e.g. 2 if session types include Prac and Tute)
 DEFAULT_PREFERENCE_THRESHOLD = {
     SessionType.PRACTICAL: 0,
     SessionType.TUTORIAL: 0
 }
 
-# Used for seniority constraint. Generally new staff should get fewer hours than senior staff.
-# A value of 0.5 means every new staff should get AROUND half the number of hours compared to a
-# senior tutor. Value must be >= 0 and <= 1.
+# Used for seniority constraint. Generally new staff should get fewer hours
+# than senior staff. # A value of 0.5 means every new staff should get AROUND
+# half the number of hours compared to a senior tutor. Value must be >= 0 and
+# <= 1.
 DEFAULT_NEW_THRESHOLD = 1
 
 
@@ -40,12 +42,8 @@ class Solver:
                  new_threshold: float = None,
                  preference_threshold=None):
 
-        self._tutors: Dict[int, Staff] = {tutor.id: tutor for tutor in tutors}
-        self._real_tutors = {tutor.id: tutor for tutor in tutors if tutor.id
-                             > 0}
-        self._dummy_tutors: Dict[int, Staff] = {tutor.id: tutor for tutor in
-                                                tutors if tutor.id < 0}
-        self._session_streams: Dict[int, SessionStream] = {
+        self._tutors: Dict[str, Staff] = {tutor.id: tutor for tutor in tutors}
+        self._session_streams: Dict[str, SessionStream] = {
             session_stream.id: session_stream for
             session_stream in session_streams}
         self._weeks: Dict[int, Week] = {week.id: week for week in weeks}
@@ -117,12 +115,13 @@ class Solver:
     def _setup_tutor_on_day_var(self):
         self._tutor_on_day_var = {
             (tutor_id, day_id): self._model.addVar(vtype=GRB.BINARY)
-            for tutor_id in self._real_tutors
+            for tutor_id in self._tutors
             for day_id in self._days
         }
 
     def _setup_clashing_session_data(self):
-        """Set up session data dictionary, 1 if session runs at a time, 0 otherwise"""
+        """Set up session data dictionary, 1 if session runs at a time,
+        0 otherwise"""
         self._clashing_session_data = {
             (stream_a_id, stream_b_id): int(
                 stream_a.time.clashes_with(stream_b.time) and
@@ -135,7 +134,7 @@ class Solver:
 
     def _setup_tutor_on_day_constraint(self):
         for session_stream_id, session_stream in self._session_streams.items():
-            for tutor_id in self._real_tutors:
+            for tutor_id in self._tutors:
                 self._model.addConstr(
                     self._tutor_on_day_var[tutor_id, session_stream.day] >=
                     self._allocation_var[tutor_id, session_stream_id])
@@ -155,14 +154,15 @@ class Solver:
     def _setup_tutor_availability_constraint(self):
         """staff can only work when they're available"""
         for tutor_id, tutor in self._tutors.items():
-            for session_stream_id, session_stream in self._session_streams.items():
+            for stream_id, session_stream in self._session_streams.items():
                 self._model.addConstr(
-                    self._allocation_var[tutor_id, session_stream_id] <=
-                    tutor.is_available(session_stream)
+                    self._allocation_var[tutor_id, stream_id] <=
+                    int(tutor.is_available(session_stream))
                 )
 
     def _setup_allocation_collision_constraint(self):
-        """tutor must work on at most one session per time slot, i.e. no collision"""
+        """tutor must work on at most one session per time slot,
+        i.e. no collision"""
         for (stream_a_id, stream_a), (stream_b_id, stream_b) in product(
                 self._session_streams.items(), repeat=2):
             if stream_a == stream_b or \
@@ -176,20 +176,20 @@ class Solver:
 
     def _setup_number_of_tutors_constraint(self):
         """
-        Each session stream should be allocated exactly the number of staff that stream
-        requires.
+        Each session stream should be allocated exactly the number of staff that
+        stream requires.
         """
         for session_stream_id, session_stream in self._session_streams.items():
             self._model.addConstr(
                 quicksum(self._allocation_var[tutor_id, session_stream_id]
-                         for tutor_id in
-                         self._tutors) == session_stream.number_of_tutors
+                         for tutor_id in self._tutors)
+                <= session_stream.number_of_tutors
             )
 
     def _setup_preference_hour_constraint(self):
         """Tutors should work more in their preferred session type"""
         # sum preference hours >= self._preference_threshold * sum all hours
-        for tutor_id, tutor in self._real_tutors.items():
+        for tutor_id, tutor in self._tutors.items():
             if tutor.type_preference is None:
                 continue
             self._model.addConstr(
@@ -204,9 +204,9 @@ class Solver:
 
     def _setup_contiguous_hours_constraint(self, model, allocation_vars,
                                            allocation_solution):
-        """Staff must not work consecutively longer than their maximum contiguous hours
-        constraint"""
-        for tutor_id, tutor in self._real_tutors.items():
+        """Staff must not work consecutively longer than their maximum
+        contiguous hours constraint"""
+        for tutor_id, tutor in self._tutors.items():
             allocated_streams = [stream_id
                                  for (tutor_id_, stream_id), value in
                                  allocation_solution.items()
@@ -269,7 +269,7 @@ class Solver:
 
     def _setup_maximum_weekly_hours_constraint(self):
         """Staff must not work more than their maximum weekly hours per week"""
-        for tutor_id, tutor in self._real_tutors.items():
+        for tutor_id, tutor in self._tutors.items():
             self._model.addConstr(
                 quicksum(self._allocation_var[tutor_id, session_stream_id] *
                          session_stream.time.duration()
@@ -295,7 +295,7 @@ class Solver:
                     for session_stream_id, session_stream in
                     self._session_streams.items()
                 )
-            for tutor_id, tutor in self._real_tutors.items()
+            for tutor_id, tutor in self._tutors.items()
         }
         # mean of number of allocated hours for every tutor
         mean_hours = sum(
@@ -303,18 +303,18 @@ class Solver:
             session_stream.number_of_tutors *
             len(session_stream.weeks)
             for session_stream in self._session_streams.values()
-        ) / len(self._real_tutors)
+        ) / len(self._tutors)
 
         # Difference between allocated hours and mean hours for every tutor
         differences = {tutor_id: self._model.addVar(lb=-GRB.INFINITY) for
-                       tutor_id in self._real_tutors}
+                       tutor_id in self._tutors}
 
         # Absolute variance between allocated hours and mean hours
         absolute_variances = {tutor_id: self._model.addVar() for tutor_id in
-                              self._real_tutors}
+                              self._tutors}
 
         # Link difference and absolute variances
-        for tutor_id in self._real_tutors:
+        for tutor_id in self._tutors:
             self._model.addConstr(
                 total_hours[tutor_id] - differences[tutor_id] == mean_hours)
             self._model.addConstr(
@@ -322,29 +322,27 @@ class Solver:
 
         self._model.ModelSense = GRB.MINIMIZE
 
-        # minimize amount of hours allocated to dummy tutors
-        dummy_hours = quicksum(
-            self._allocation_var[tutor_id, session_stream_id] *
-            session_stream.time.duration() *
-            len(session_stream.weeks)
-            for tutor_id in self._dummy_tutors
-            for session_stream_id, session_stream in
-            self._session_streams.items())
-        self._model.setObjectiveN(dummy_hours, 0, priority=2)
+        # minimize amount of unallocated hours
+        unallocated_hours = quicksum(
+            stream.number_of_tutors * stream.total_hours() -
+            quicksum(self._allocation_var[tutor_id, stream.id]
+                     for tutor_id in self._tutors) * stream.total_hours()
+            for stream in self._session_streams.values()
+        )
+        self._model.setObjectiveN(unallocated_hours, 0, priority=2)
 
         # Minimize absolute variances between tutors
         spread = quicksum(
-            absolute_variances[tutor_id] for tutor_id in self._real_tutors)
+            absolute_variances[tutor_id] for tutor_id in self._tutors)
         self._model.setObjectiveN(spread, 1, priority=1)
 
         # Minimize number of days tutors have to go to work
         self._model.setObjectiveN(
             quicksum(self._tutor_on_day_var[tutor_id, day_id]
-                     for tutor_id in self._real_tutors
+                     for tutor_id in self._tutors
                      for day_id in self._days), 2, priority=0)
 
     def solve(self, output_log_file=""):
-        # TODO: Binary search for optimal spread hours constraint (currently set to 2).
         self._setup_data()
         self._setup_variables()
         self._setup_constraints()
