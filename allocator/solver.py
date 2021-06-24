@@ -103,7 +103,7 @@ class Solver:
         self._setup_number_of_tutors_constraint()
         self._setup_tutor_on_day_constraint()
         self._setup_tutor_availability_constraint()
-        # self._setup_seniority_for_session_constraint()
+        self._setup_seniority_for_session_constraint()
         self._setup_maximum_weekly_hours_constraint()
         self._setup_preference_hour_constraint()
 
@@ -165,8 +165,8 @@ class Solver:
         """tutor must work on at most one session per time slot, i.e. no collision"""
         for (stream_a_id, stream_a), (stream_b_id, stream_b) in product(
                 self._session_streams.items(), repeat=2):
-            if stream_a == stream_b or self._clashing_session_data[
-                stream_a_id, stream_b_id] == 0:
+            if stream_a == stream_b or \
+                    self._clashing_session_data[stream_a_id, stream_b_id] == 0:
                 continue
             for tutor_id in self._tutors:
                 self._model.addConstr(

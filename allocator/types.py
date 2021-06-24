@@ -1,7 +1,9 @@
 from typing import TypedDict, Dict, List, Optional
 from enum import Enum, IntEnum
 
-SessionId = StaffId = WeekId = int
+SessionId = StaffId = str
+
+WeekId = int
 
 Allocation = Dict[SessionId, List[StaffId]]
 
