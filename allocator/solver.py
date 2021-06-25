@@ -114,9 +114,10 @@ class Solver:
 
     def _setup_tutor_on_day_var(self):
         self._tutor_on_day_var = {
-            (tutor_id, day_id): self._model.addVar(vtype=GRB.BINARY)
+            (tutor_id, day_id, week): self._model.addVar(vtype=GRB.BINARY)
             for tutor_id in self._tutors
             for day_id in self._days
+            for week in self._weeks
         }
 
     def _setup_clashing_session_data(self):
@@ -133,21 +134,23 @@ class Solver:
         }
 
     def _setup_tutor_on_day_constraint(self):
-        for session_stream_id, session_stream in self._session_streams.items():
-            for tutor_id in self._tutors:
-                self._model.addConstr(
-                    self._tutor_on_day_var[tutor_id, session_stream.day] >=
-                    self._allocation_var[tutor_id, session_stream_id])
+        self._model.addConstrs(
+            self._tutor_on_day_var[tutor_id, stream.day, week] >=
+            self._allocation_var[tutor_id, stream_id]
+            * int(week in stream.weeks)
+            for stream_id, stream in self._session_streams.items()
+            for tutor_id in self._tutors
+            for week in self._weeks)
 
     def _setup_seniority_for_session_constraint(self):
-        """Each session has to have a least 1 senior tutor"""
+        """Each session has to have a least 1 senior tutor if possible"""
         for session_stream_id in self._session_streams:
             self._model.addConstr(
                 quicksum(self._allocation_var[tutor_id, session_stream_id]
-                         for tutor_id in self._tutors) - 1 >=
-                quicksum(
-                    self._allocation_var[tutor_id, session_stream_id] * int(
-                        tutor.new)
+                         for tutor_id in self._tutors) - 1
+                >= quicksum(
+                    self._allocation_var[tutor_id, session_stream_id]
+                    * int(tutor.new)
                     for tutor_id, tutor in self._tutors.items())
             )
 
@@ -338,9 +341,11 @@ class Solver:
 
         # Minimize number of days tutors have to go to work
         self._model.setObjectiveN(
-            quicksum(self._tutor_on_day_var[tutor_id, day_id]
+            quicksum(self._tutor_on_day_var[tutor_id, day_id, week]
                      for tutor_id in self._tutors
-                     for day_id in self._days), 2, priority=0)
+                     for day_id in self._days
+                     for week in self._weeks),
+            2, priority=0)
 
     def solve(self, output_log_file=""):
         self._setup_data()
