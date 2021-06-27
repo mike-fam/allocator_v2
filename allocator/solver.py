@@ -1,7 +1,7 @@
 import time
 from itertools import product
 
-from gurobipy.gurobipy import GRB, quicksum, Model, abs_
+from gurobipy.gurobipy import GRB, quicksum, Model, abs_, max_
 
 from .schema import *
 
@@ -10,6 +10,8 @@ from .schema import *
 # of any other session. Higher values may lead to infeasibility, value must be
 # > 1/types_num for preferencing to work, where types_num is the number of
 # session types (e.g. 2 if session types include Prac and Tute)
+from .types import SessionId
+
 DEFAULT_PREFERENCE_THRESHOLD = {
     SessionType.PRACTICAL: 0,
     SessionType.TUTORIAL: 0
@@ -47,6 +49,12 @@ class Solver:
             session_stream.id: session_stream for
             session_stream in session_streams}
         self._weeks: Dict[int, Week] = {week.id: week for week in weeks}
+        self._week_sessions: Dict[int, List[SessionStream]] = {}
+        for session_stream in session_streams:
+            for week in session_stream.weeks:
+                if week not in self._week_sessions:
+                    self._week_sessions[week] = []
+                self._week_sessions[week].append(session_stream)
 
         if new_threshold is None:
             new_threshold = DEFAULT_NEW_THRESHOLD
@@ -101,7 +109,7 @@ class Solver:
         self._setup_number_of_tutors_constraint()
         self._setup_tutor_on_day_constraint()
         self._setup_tutor_availability_constraint()
-        self._setup_seniority_for_session_constraint()
+        # self._setup_seniority_for_session_constraint()
         self._setup_maximum_weekly_hours_constraint()
         self._setup_preference_hour_constraint()
 
@@ -135,10 +143,10 @@ class Solver:
 
     def _setup_tutor_on_day_constraint(self):
         self._model.addConstrs(
-            self._tutor_on_day_var[tutor_id, stream.day, week] >=
+            self._tutor_on_day_var[tutor_id, self._session_streams[stream_id].day, week] >=
             self._allocation_var[tutor_id, stream_id]
-            * int(week in stream.weeks)
-            for stream_id, stream in self._session_streams.items()
+            * int(week in self._session_streams[stream_id].weeks)
+            for stream_id in self._session_streams
             for tutor_id in self._tutors
             for week in self._weeks)
 
@@ -273,13 +281,20 @@ class Solver:
     def _setup_maximum_weekly_hours_constraint(self):
         """Staff must not work more than their maximum weekly hours per week"""
         for tutor_id, tutor in self._tutors.items():
-            self._model.addConstr(
-                quicksum(self._allocation_var[tutor_id, session_stream_id] *
-                         session_stream.time.duration()
-                         for session_stream_id, session_stream in
-                         self._session_streams.items()) <=
-                tutor.max_weekly_hours
-            )
+            for week, streams in self._week_sessions.items():
+                self._model.addConstr(
+                    quicksum(self._allocation_var[tutor_id, stream.id]
+                             * stream.time.duration()
+                             for stream in streams)
+                    <= tutor.max_weekly_hours
+                )
+            # self._model.addConstr(
+            #     quicksum(self._allocation_var[tutor_id, session_stream_id] *
+            #              session_stream.time.duration()
+            #              for session_stream_id, session_stream in
+            #              self._session_streams.items()) <=
+            #     tutor.max_weekly_hours
+            # )
 
     def _setup_objective(self):
         """
@@ -332,7 +347,7 @@ class Solver:
                      for tutor_id in self._tutors) * stream.total_hours()
             for stream in self._session_streams.values()
         )
-        self._model.setObjectiveN(unallocated_hours, 0, priority=2)
+        self._model.setObjectiveN(unallocated_hours, 0, priority=2, weight=2)
 
         # Minimize absolute variances between tutors
         spread = quicksum(
@@ -350,8 +365,8 @@ class Solver:
     def solve(self, output_log_file=""):
         self._setup_data()
         self._setup_variables()
-        self._setup_constraints()
         self._setup_objective()
+        self._setup_constraints()
         # self._model.Params.LogFile = output_log_file
         self._model.optimize(
             lazy_constraints(self._allocation_var,
