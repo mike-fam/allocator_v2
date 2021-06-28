@@ -76,7 +76,7 @@ class Solver:
         self._days = [IsoDay.MON, IsoDay.TUE, IsoDay.WED, IsoDay.THU,
                       IsoDay.FRI]
         self._max_weekly_hours_constraint = {}
-        self._results: Dict[int, List[int]] = {session_stream_id: []
+        self._results: Dict[str, List[str]] = {session_stream_id: []
                                                for session_stream_id in
                                                self._session_streams}
         print("starting timer")
@@ -109,7 +109,7 @@ class Solver:
         self._setup_number_of_tutors_constraint()
         self._setup_tutor_on_day_constraint()
         self._setup_tutor_availability_constraint()
-        # self._setup_seniority_for_session_constraint()
+        self._setup_seniority_for_session_constraint()
         self._setup_maximum_weekly_hours_constraint()
         self._setup_preference_hour_constraint()
 
@@ -152,10 +152,13 @@ class Solver:
 
     def _setup_seniority_for_session_constraint(self):
         """Each session has to have a least 1 senior tutor if possible"""
-        for session_stream_id in self._session_streams:
+        for session_stream_id, stream in self._session_streams.items():
             self._model.addConstr(
-                quicksum(self._allocation_var[tutor_id, session_stream_id]
-                         for tutor_id in self._tutors) - 1
+                quicksum(
+                    self._allocation_var[tutor_id, session_stream_id]
+                    * (1 - int(tutor.new))
+                    for tutor_id, tutor in self._tutors.items()
+                ) * (stream.number_of_tutors - 1)
                 >= quicksum(
                     self._allocation_var[tutor_id, session_stream_id]
                     * int(tutor.new)
@@ -347,7 +350,7 @@ class Solver:
                      for tutor_id in self._tutors) * stream.total_hours()
             for stream in self._session_streams.values()
         )
-        self._model.setObjectiveN(unallocated_hours, 0, priority=2, weight=2)
+        self._model.setObjectiveN(unallocated_hours, 0, priority=2)
 
         # Minimize absolute variances between tutors
         spread = quicksum(
