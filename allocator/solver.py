@@ -10,7 +10,7 @@ from .schema import *
 # of any other session. Higher values may lead to infeasibility, value must be
 # > 1/types_num for preferencing to work, where types_num is the number of
 # session types (e.g. 2 if session types include Prac and Tute)
-from .types import SessionId
+from .types import SessionId, StaffId
 
 DEFAULT_PREFERENCE_THRESHOLD = {
     SessionType.PRACTICAL: 0,
@@ -76,9 +76,10 @@ class Solver:
         self._days = [IsoDay.MON, IsoDay.TUE, IsoDay.WED, IsoDay.THU,
                       IsoDay.FRI]
         self._max_weekly_hours_constraint = {}
-        self._results: Dict[int, List[int]] = {session_stream_id: []
-                                               for session_stream_id in
-                                               self._session_streams}
+        self._results: Dict[SessionId, List[StaffId]] = {
+            session_stream_id: []
+            for session_stream_id in self._session_streams
+        }
         print("starting timer")
         self._start_time = time.time()
 
@@ -143,8 +144,10 @@ class Solver:
 
     def _setup_tutor_on_day_constraint(self):
         self._model.addConstrs(
-            self._tutor_on_day_var[tutor_id, self._session_streams[stream_id].day, week] >=
-            self._allocation_var[tutor_id, stream_id]
+            self._tutor_on_day_var[tutor_id,
+                                   self._session_streams[stream_id].day,
+                                   week]
+            >= self._allocation_var[tutor_id, stream_id]
             * int(week in self._session_streams[stream_id].weeks)
             for stream_id in self._session_streams
             for tutor_id in self._tutors
@@ -152,10 +155,12 @@ class Solver:
 
     def _setup_seniority_for_session_constraint(self):
         """Each session has to have a least 1 senior tutor if possible"""
-        for session_stream_id in self._session_streams:
+        for session_stream_id, session_stream in self._session_streams.items():
             self._model.addConstr(
-                quicksum(self._allocation_var[tutor_id, session_stream_id]
-                         for tutor_id in self._tutors) - 1
+                (session_stream.number_of_tutors - 1)
+                * quicksum(self._allocation_var[tutor_id, session_stream_id]
+                           * (1 - int(tutor.new))
+                           for tutor_id, tutor in self._tutors.items())
                 >= quicksum(
                     self._allocation_var[tutor_id, session_stream_id]
                     * int(tutor.new)
