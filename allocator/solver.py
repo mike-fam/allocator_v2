@@ -66,6 +66,8 @@ class Solver:
 
         self._model = Model()
         self._model.setParam("LazyConstraints", 1)
+        self._model.setParam("TimeLimit", 1800)  # Run for at most 30 minutes
+        self._model.setParam("NonConvex", 2)  # For quadratic variance
         # self._model.Params.LogToConsole = 0
 
         self._allocation_var = {}
@@ -333,15 +335,15 @@ class Solver:
                        tutor_id in self._tutors}
 
         # Absolute variance between allocated hours and mean hours
-        absolute_variances = {tutor_id: self._model.addVar() for tutor_id in
-                              self._tutors}
+        variance = {tutor_id: self._model.addVar() for tutor_id in
+                    self._tutors}
 
         # Link difference and absolute variances
         for tutor_id in self._tutors:
             self._model.addConstr(
                 total_hours[tutor_id] - differences[tutor_id] == mean_hours)
             self._model.addConstr(
-                absolute_variances[tutor_id] == abs_(differences[tutor_id]))
+                variance[tutor_id] == differences[tutor_id] * differences[tutor_id])
 
         self._model.ModelSense = GRB.MINIMIZE
 
@@ -356,7 +358,7 @@ class Solver:
 
         # Minimize absolute variances between tutors
         spread = quicksum(
-            absolute_variances[tutor_id] for tutor_id in self._tutors)
+            variance[tutor_id] for tutor_id in self._tutors)
         self._model.setObjectiveN(spread, 1, priority=1)
 
         # Minimize number of days tutors have to go to work
@@ -377,7 +379,7 @@ class Solver:
             lazy_constraints(self._allocation_var,
                              self._setup_contiguous_hours_constraint)
         )
-        if self._model.Status != GRB.OPTIMAL:
+        if self._model.Status not in (GRB.OPTIMAL, GRB.TIME_LIMIT):
             return self._model.Status
         self._populate_allocation()
         return GRB.OPTIMAL

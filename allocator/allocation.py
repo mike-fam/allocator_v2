@@ -21,7 +21,9 @@ INFEASIBLE_MESSAGE = "Model infeasible.\n" \
 STATUSES = {
     GRB.OPTIMAL: ("Optimal solution found", "success",
                   "Allocation successfully generated at {time}."),
-    GRB.INFEASIBLE: ("Infeasible model", "failed", INFEASIBLE_MESSAGE)
+    GRB.INFEASIBLE: ("Infeasible model", "failed", INFEASIBLE_MESSAGE),
+    GRB.TIME_LIMIT: ("Time limit reached", "success",
+                     "Allocation runs too long and was stopped")
 }
 
 
