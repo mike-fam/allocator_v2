@@ -14,7 +14,7 @@ from .type_hints import RequestStatus, Input
 
 def run_allocation(allocator: Allocator, token: str):
     result = allocator.run_allocation()
-    result_obj = Result.objects.get()
+    result_obj = Result.objects.get(key=token)
     result_obj.value = json.dumps(result)
     result_obj.save()
 
