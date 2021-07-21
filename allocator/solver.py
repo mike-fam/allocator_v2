@@ -10,7 +10,7 @@ from .schema import *
 # of any other session. Higher values may lead to infeasibility, value must be
 # > 1/types_num for preferencing to work, where types_num is the number of
 # session types (e.g. 2 if session types include Prac and Tute)
-from .types import SessionId, StaffId
+from .type_hints import SessionId, StaffId
 
 DEFAULT_PREFERENCE_THRESHOLD = {
     SessionType.PRACTICAL: 0,

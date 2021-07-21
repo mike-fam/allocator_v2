@@ -4,7 +4,7 @@ import argparse
 from datetime import datetime
 from typing import Optional
 
-from .types import InputData
+from .type_hints import InputData
 from .schema import Staff, SessionStream, Week
 from .solver import Solver
 

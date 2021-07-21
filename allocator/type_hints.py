@@ -12,6 +12,13 @@ class StrEnum(str, Enum):
     pass
 
 
+class RequestStatus(StrEnum):
+    REQUESTED = "REQUESTED"
+    NOT_READY = "NOT_READY"
+    ERROR = "ERROR"
+    GENERATED = "GENERATED"
+
+
 class Output(TypedDict):
     status: str
     type: str

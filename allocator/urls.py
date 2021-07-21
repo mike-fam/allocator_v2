@@ -1,7 +1,7 @@
 from django.urls import path
-from .views import index, request_allocation
+from .views import get_allocation, request_allocation
 
 urlpatterns = [
-    path('', index),
-    path('request-allocation/', request_allocation),
+    path('get-allocation', get_allocation),
+    path('request-allocation/<str:token>', request_allocation),
 ]
