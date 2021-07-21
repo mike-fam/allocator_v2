@@ -87,3 +87,5 @@ class Input(TypedDict):
     request_time: str
     requester: str
     data: InputData
+    token: str
+    timeout: int

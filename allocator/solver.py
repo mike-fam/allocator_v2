@@ -42,7 +42,8 @@ class Solver:
                  session_streams: List[SessionStream],
                  weeks: List[Week],
                  new_threshold: float = None,
-                 preference_threshold=None):
+                 preference_threshold=None,
+                 timeout=3600):
 
         self._tutors: Dict[str, Staff] = {tutor.id: tutor for tutor in tutors}
         self._session_streams: Dict[str, SessionStream] = {
@@ -66,7 +67,7 @@ class Solver:
 
         self._model = Model()
         self._model.setParam("LazyConstraints", 1)
-        self._model.setParam("TimeLimit", 1800)  # Run for at most 30 minutes
+        self._model.setParam("TimeLimit", timeout)  # Run for at most 30 minutes
         self._model.setParam("NonConvex", 2)  # For quadratic variance
         # self._model.Params.LogToConsole = 0
 

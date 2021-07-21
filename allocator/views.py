@@ -8,7 +8,7 @@ from django.views.decorators.http import require_POST, require_GET
 import multiprocessing
 
 from .models import Result
-from .type_hints import RequestStatus
+from .type_hints import RequestStatus, Input
 
 
 def run_allocation(allocator: Allocator, token: str):
@@ -20,8 +20,8 @@ def run_allocation(allocator: Allocator, token: str):
 @csrf_exempt
 @require_POST
 def request_allocation(request):
-    data = json.loads(request.body)
-    allocator: Allocator = Allocator.from_input(data["data"])
+    data: Input = json.loads(request.body)
+    allocator: Allocator = Allocator.from_input(data["data"], data["timeout"])
     new_process = multiprocessing.Process(target=run_allocation,
                                           args=(allocator, data["token"]))
     new_process.start()

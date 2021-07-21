@@ -34,9 +34,10 @@ class Allocator:
         self._weeks = []
         self._new_threshold: Optional[float] = None
         self._allocation = {}
+        self._timeout = 3600
 
     @classmethod
-    def from_input(cls, json_input: InputData):
+    def from_input(cls, json_input: InputData, timeout: int):
         instance = cls()
         instance._weeks = [Week.from_input(week_input)
                            for week_input in json_input["weeks"]]
@@ -45,6 +46,7 @@ class Allocator:
         instance._session_streams = [SessionStream.from_input(stream_input)
                                      for stream_input in
                                      json_input["session_streams"]]
+        instance._timeout = timeout
         return instance
 
     def run_allocation(self):
