@@ -17,6 +17,7 @@ class RequestStatus(StrEnum):
     NOT_READY = "NOT_READY"
     ERROR = "ERROR"
     GENERATED = "GENERATED"
+    NOT_EXIST = "NOT_EXIST"
 
 
 class Output(TypedDict):

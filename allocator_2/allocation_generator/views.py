@@ -14,7 +14,8 @@ from .type_hints import RequestStatus, Input
 
 def run_allocation(allocator: Allocator, token: str):
     result = allocator.run_allocation()
-    result_obj = Result(key=token, value=json.dumps(result))
+    result_obj = Result.objects.get()
+    result_obj.value = json.dumps(result)
     result_obj.save()
 
 
@@ -26,6 +27,8 @@ def request_allocation(request):
     new_process = multiprocessing.Process(target=run_allocation,
                                           args=(allocator, data["token"]))
     new_process.start()
+    result_obj = Result(key=data["token"], value=None)
+    result_obj.save()
     return JsonResponse({"status": RequestStatus.REQUESTED, "allocation": {}})
 
 
@@ -34,12 +37,18 @@ def request_allocation(request):
 def get_allocation(request, token):
     try:
         result = Result.objects.get(key=token)
-        return JsonResponse({
-            "status": RequestStatus.GENERATED,
-            "allocations": json.loads(result.value)["allocations"]
-        })
+        if result.value is None:
+            return JsonResponse({
+                "status": RequestStatus.NOT_READY,
+                "allocations": {}
+            })
+        else:
+            return JsonResponse({
+                "status": RequestStatus.GENERATED,
+                "allocations": json.loads(result.value)["allocations"]
+            })
     except Result.DoesNotExist:
         return JsonResponse({
-            "status": RequestStatus.NOT_READY,
+            "status": RequestStatus.NOT_EXIST,
             "allocations": {}
         })
