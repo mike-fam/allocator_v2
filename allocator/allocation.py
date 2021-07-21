@@ -40,7 +40,6 @@ class Allocator:
         instance = cls()
         instance._weeks = [Week.from_input(week_input)
                            for week_input in json_input["weeks"]]
-        instance._new_threshold = json_input["new_threshold"] or 1
         instance._staff = [Staff.from_input(staff_input)
                            for staff_input in json_input["staff"]]
         instance._session_streams = [SessionStream.from_input(stream_input)
