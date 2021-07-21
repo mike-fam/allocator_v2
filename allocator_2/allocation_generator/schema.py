@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict
 
-from allocator.type_hints import WeekInput, TimeslotInput, IsoDay, StaffInput, SessionType, SessionStreamInput, WeekId
+from allocation_generator.type_hints import WeekInput, TimeslotInput, IsoDay, StaffInput, SessionType, SessionStreamInput, WeekId
 
 
 @dataclass(frozen=True, eq=True)

@@ -2,10 +2,12 @@ import json
 
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from allocator.allocation import Allocator
 from django.views.decorators.http import require_POST, require_GET
 import multiprocessing
+import django
+django.setup()
 
+from .allocation import Allocator
 from .models import Result
 from .type_hints import RequestStatus, Input
 
@@ -34,10 +36,10 @@ def get_allocation(request, token):
         result = Result.objects.get(key=token)
         return JsonResponse({
             "status": RequestStatus.GENERATED,
-            "allocation": json.loads(result.value)
+            "allocations": json.loads(result.value)["allocations"]
         })
     except Result.DoesNotExist:
         return JsonResponse({
             "status": RequestStatus.NOT_READY,
-            "allocation": {}
+            "allocations": {}
         })

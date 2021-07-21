@@ -16,5 +16,5 @@ Including another URLconf
 from django.urls import path, include
 
 urlpatterns = [
-    path('allocator/', include('allocator.urls')),
+    path('allocation_generator/', include('allocation_generator.urls')),
 ]

@@ -53,7 +53,8 @@ class Allocator:
         start_time = time.time()
         solver = Solver(self._staff,
                         self._session_streams,
-                        self._weeks)
+                        self._weeks,
+                        timeout=self._timeout)
         status = solver.solve()
         response_status, type_, message = STATUSES[status]
         allocations = {}
@@ -71,7 +72,7 @@ class Allocator:
 
 
 def setup_parser():
-    parser = argparse.ArgumentParser(prog="allocator",
+    parser = argparse.ArgumentParser(prog="allocation_generator",
                                      description="Generate tutor allocations")
     parser.add_argument('json_input', type=str, help="JSON file containing model input")
 
