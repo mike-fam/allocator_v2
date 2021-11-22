@@ -10,7 +10,7 @@ from .schema import *
 # of any other session. Higher values may lead to infeasibility, value must be
 # > 1/types_num for preferencing to work, where types_num is the number of
 # session types (e.g. 2 if session types include Prac and Tute)
-from .types import SessionId
+from .type_hints import SessionId, StaffId
 
 DEFAULT_PREFERENCE_THRESHOLD = {
     SessionType.PRACTICAL: 0,
@@ -42,7 +42,8 @@ class Solver:
                  session_streams: List[SessionStream],
                  weeks: List[Week],
                  new_threshold: float = None,
-                 preference_threshold=None):
+                 preference_threshold=None,
+                 timeout=3600):
 
         self._tutors: Dict[str, Staff] = {tutor.id: tutor for tutor in tutors}
         self._session_streams: Dict[str, SessionStream] = {
@@ -66,6 +67,8 @@ class Solver:
 
         self._model = Model()
         self._model.setParam("LazyConstraints", 1)
+        self._model.setParam("TimeLimit", timeout)  # Run for at most 30 minutes
+        self._model.setParam("NonConvex", 2)  # For quadratic variance
         # self._model.Params.LogToConsole = 0
 
         self._allocation_var = {}
@@ -76,9 +79,10 @@ class Solver:
         self._days = [IsoDay.MON, IsoDay.TUE, IsoDay.WED, IsoDay.THU,
                       IsoDay.FRI]
         self._max_weekly_hours_constraint = {}
-        self._results: Dict[str, List[str]] = {session_stream_id: []
-                                               for session_stream_id in
-                                               self._session_streams}
+        self._results: Dict[SessionId, List[StaffId]] = {
+            session_stream_id: []
+            for session_stream_id in self._session_streams
+        }
         print("starting timer")
         self._start_time = time.time()
 
@@ -143,8 +147,10 @@ class Solver:
 
     def _setup_tutor_on_day_constraint(self):
         self._model.addConstrs(
-            self._tutor_on_day_var[tutor_id, self._session_streams[stream_id].day, week] >=
-            self._allocation_var[tutor_id, stream_id]
+            self._tutor_on_day_var[tutor_id,
+                                   self._session_streams[stream_id].day,
+                                   week]
+            >= self._allocation_var[tutor_id, stream_id]
             * int(week in self._session_streams[stream_id].weeks)
             for stream_id in self._session_streams
             for tutor_id in self._tutors
@@ -152,13 +158,12 @@ class Solver:
 
     def _setup_seniority_for_session_constraint(self):
         """Each session has to have a least 1 senior tutor if possible"""
-        for session_stream_id, stream in self._session_streams.items():
+        for session_stream_id, session_stream in self._session_streams.items():
             self._model.addConstr(
-                quicksum(
-                    self._allocation_var[tutor_id, session_stream_id]
-                    * (1 - int(tutor.new))
-                    for tutor_id, tutor in self._tutors.items()
-                ) * (stream.number_of_tutors - 1)
+                (session_stream.number_of_tutors - 1)
+                * quicksum(self._allocation_var[tutor_id, session_stream_id]
+                           * (1 - int(tutor.new))
+                           for tutor_id, tutor in self._tutors.items())
                 >= quicksum(
                     self._allocation_var[tutor_id, session_stream_id]
                     * int(tutor.new)
@@ -331,15 +336,15 @@ class Solver:
                        tutor_id in self._tutors}
 
         # Absolute variance between allocated hours and mean hours
-        absolute_variances = {tutor_id: self._model.addVar() for tutor_id in
-                              self._tutors}
+        variance = {tutor_id: self._model.addVar() for tutor_id in
+                    self._tutors}
 
         # Link difference and absolute variances
         for tutor_id in self._tutors:
             self._model.addConstr(
                 total_hours[tutor_id] - differences[tutor_id] == mean_hours)
             self._model.addConstr(
-                absolute_variances[tutor_id] == abs_(differences[tutor_id]))
+                variance[tutor_id] == differences[tutor_id] * differences[tutor_id])
 
         self._model.ModelSense = GRB.MINIMIZE
 
@@ -354,7 +359,7 @@ class Solver:
 
         # Minimize absolute variances between tutors
         spread = quicksum(
-            absolute_variances[tutor_id] for tutor_id in self._tutors)
+            variance[tutor_id] for tutor_id in self._tutors)
         self._model.setObjectiveN(spread, 1, priority=1)
 
         # Minimize number of days tutors have to go to work
@@ -375,7 +380,7 @@ class Solver:
             lazy_constraints(self._allocation_var,
                              self._setup_contiguous_hours_constraint)
         )
-        if self._model.Status != GRB.OPTIMAL:
+        if self._model.Status not in (GRB.OPTIMAL, GRB.TIME_LIMIT):
             return self._model.Status
         self._populate_allocation()
         return GRB.OPTIMAL

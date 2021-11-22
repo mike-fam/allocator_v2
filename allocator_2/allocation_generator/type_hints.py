@@ -12,6 +12,14 @@ class StrEnum(str, Enum):
     pass
 
 
+class RequestStatus(StrEnum):
+    REQUESTED = "REQUESTED"
+    NOT_READY = "NOT_READY"
+    ERROR = "ERROR"
+    GENERATED = "GENERATED"
+    NOT_EXIST = "NOT_EXIST"
+
+
 class Output(TypedDict):
     status: str
     type: str
@@ -80,3 +88,5 @@ class Input(TypedDict):
     request_time: str
     requester: str
     data: InputData
+    token: str
+    timeout: int

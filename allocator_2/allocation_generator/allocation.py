@@ -4,7 +4,7 @@ import argparse
 from datetime import datetime
 from typing import Optional
 
-from .types import InputData
+from .type_hints import InputData
 from .schema import Staff, SessionStream, Week
 from .solver import Solver
 
@@ -21,7 +21,9 @@ INFEASIBLE_MESSAGE = "Model infeasible.\n" \
 STATUSES = {
     GRB.OPTIMAL: ("Optimal solution found", "success",
                   "Allocation successfully generated at {time}."),
-    GRB.INFEASIBLE: ("Infeasible model", "failed", INFEASIBLE_MESSAGE)
+    GRB.INFEASIBLE: ("Infeasible model", "failed", INFEASIBLE_MESSAGE),
+    GRB.TIME_LIMIT: ("Time limit reached", "success",
+                     "Allocation runs too long and was stopped")
 }
 
 
@@ -32,25 +34,27 @@ class Allocator:
         self._weeks = []
         self._new_threshold: Optional[float] = None
         self._allocation = {}
+        self._timeout = 3600
 
     @classmethod
-    def from_input(cls, json_input: InputData):
+    def from_input(cls, json_input: InputData, timeout: int):
         instance = cls()
         instance._weeks = [Week.from_input(week_input)
                            for week_input in json_input["weeks"]]
-        instance._new_threshold = json_input["new_threshold"] or 1
         instance._staff = [Staff.from_input(staff_input)
                            for staff_input in json_input["staff"]]
         instance._session_streams = [SessionStream.from_input(stream_input)
                                      for stream_input in
                                      json_input["session_streams"]]
+        instance._timeout = timeout
         return instance
 
     def run_allocation(self):
         start_time = time.time()
         solver = Solver(self._staff,
                         self._session_streams,
-                        self._weeks)
+                        self._weeks,
+                        timeout=self._timeout)
         status = solver.solve()
         response_status, type_, message = STATUSES[status]
         allocations = {}
@@ -68,7 +72,7 @@ class Allocator:
 
 
 def setup_parser():
-    parser = argparse.ArgumentParser(prog="allocator",
+    parser = argparse.ArgumentParser(prog="allocation_generator",
                                      description="Generate tutor allocations")
     parser.add_argument('json_input', type=str, help="JSON file containing model input")
 
