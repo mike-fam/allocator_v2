@@ -1,73 +1,89 @@
 import json
 import time
 import argparse
+import traceback
 from datetime import datetime
 from typing import Optional
 
+from allocator.constants import (
+    FAILURE_TITLE,
+    FAILURE_MESSAGE,
+    GENERATED_MESSAGE,
+    GENERATED_TITLE,
+)
+from .type_hints import AllocationStatus, AllocationOutput
 from .schema import InputData
 from .solver import Solver
 
 from gurobipy.gurobipy import GRB
 
-INFEASIBLE_MESSAGE = (
-    "Model infeasible.\n"
-    "This is likely because there is no allocation that can "
-    "satisfy the current availability, preference and session settings.\n"
-    "The best way to fix this is to either ask staff members "
-    "to loosen their preferences, \n"
-    "Or you can change the 'default_preference_threshold' and "
-    "'default_new_threshold' attributes."
-)
-
-STATUSES = {
-    GRB.OPTIMAL: (
-        "Optimal solution found",
-        "success",
-        "Allocation successfully generated at {time}.",
-    ),
-    GRB.INFEASIBLE: ("Infeasible model", "failed", INFEASIBLE_MESSAGE),
-}
-
 
 class Allocator:
-    def __init__(self):
-        self._staff = []
-        self._session_streams = []
-        self._weeks = []
-        self._new_threshold: Optional[float] = None
-        self._allocation = {}
-        self._timeout = 3600
+    def __init__(self, input_data: InputData):
+        self._input_data = input_data
 
-    @classmethod
-    def from_input(cls, input_data: InputData):
-        instance = cls()
-        instance._weeks = input_data.weeks
-        instance._new_threshold = input_data.new_threshold or 1
-        instance._staff = input_data.staff
-        instance._session_streams = input_data.session_streams
-        instance._timeout = input_data.timeout
-        return instance
-
-    def run_allocation(self):
+    def run_allocation(self) -> AllocationOutput:
         start_time = time.time()
-        solver = Solver(self._staff, self._session_streams, self._weeks,
-                        timeout=self._timeout)
-        status = solver.solve()
-        title, type_, message = STATUSES[status]
+        solver = Solver(
+            self._input_data.staff,
+            self._input_data.session_streams,
+            self._input_data.weeks,
+            timeout=self._input_data.timeout,
+        )
+        grb_status = solver.solve()
         allocations = {}
-        if status == GRB.OPTIMAL:
+
+        if grb_status == GRB.OPTIMAL or grb_status == GRB.TIME_LIMIT:
+            title = GENERATED_TITLE
             allocations = solver.get_results()
-            message = message.format(
-                time=datetime.now().strftime("%I:%M %p on %d %b %Y")
+            message = GENERATED_MESSAGE.format(
+                runtime=datetime.now().strftime("%I:%M %p on %d %b %Y")
             )
+            status = AllocationStatus.GENERATED
+        elif grb_status == GRB.INTERRUPTED:
+            raise KeyboardInterrupt("Allocation process was interrupted")
+        else:
+            title = FAILURE_TITLE
+            message = FAILURE_MESSAGE
+            status = AllocationStatus.ERROR
         # Write to file
-        return {
-            "status": title,
-            "type": type_,
-            "message": message,
-            "allocations": allocations,
-            "runtime": round(time.time() - start_time),
-        }
+        return AllocationOutput(
+            title,
+            status,
+            message,
+            int(time.time() - start_time),
+            result=allocations,
+        )
+
+
+def _run_allocation(allocator: Allocator, timetable_id: str):
+    import django
+
+    django.setup()
+    from .models import AllocationState
+
+    while True:
+        # Wait until allocation state is saved
+        try:
+            allocation_state = AllocationState.objects.get(
+                timetable_id=timetable_id
+            )
+            break
+        except AllocationState.DoesNotExist:
+            continue
+
+    try:
+        result = allocator.run_allocation()
+        allocation_state.result = result.result
+        allocation_state.runtime = result.runtime
+        allocation_state.title = result.title
+        allocation_state.type = result.type
+        allocation_state.message = result.message
+    except:
+        allocation_state.type = AllocationStatus.ERROR
+        allocation_state.title = "An Error Occurred"
+        allocation_state.message = traceback.format_exc(0)
+    allocation_state.save()
 
 
 def setup_parser():
@@ -85,7 +101,7 @@ def main():
     parser = setup_parser()
     args = parser.parse_args()
 
-    allocator = Allocator.from_input(json.loads(args.json_input))
+    allocator = Allocator(InputData(**json.loads(args.json_input)))
     allocator.run_allocation()
 
 

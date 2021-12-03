@@ -5,6 +5,7 @@ from allocator.type_hints import (
     IsoDay,
     SessionType,
     WeekId,
+    Allocation,
 )
 
 
@@ -111,8 +112,10 @@ class Staff:
 
     def __post_init__(self):
         self.availabilities = {
-            day: Timeslot(**timeslot)  # type: ignore
-            for day, timeslot in self.availabilities.items()
+            int(day): [
+                Timeslot(*timeslot) for timeslot in timeslots  # type: ignore
+            ]
+            for day, timeslots in self.availabilities.items()
         }
 
     @classmethod
@@ -132,6 +135,7 @@ class SessionStream:
     type: SessionType  # e.g. 'Practical' or 'Tutorial'
     day: IsoDay
     number_of_tutors: int
+    location: str
     time: Timeslot = None
     weeks: List[WeekId] = field(default_factory=list)
 
@@ -142,7 +146,7 @@ class SessionStream:
         return str(self)
 
     def __post_init__(self):
-        self.timeslot = Timeslot(*self.timeslot)  # type: ignore
+        self.time = Timeslot(*self.time)  # type: ignore
 
     def total_hours(self):
         return self.time.duration() * len(self.weeks)
@@ -163,7 +167,6 @@ class InputData:
             SessionStream(**stream)  # type: ignore
             for stream in self.session_streams
         ]
-        print(self.staff)
         self.staff = [Staff(**staff) for staff in self.staff]  # type: ignore
 
 
@@ -175,3 +178,12 @@ class Input:
 
     def __post_init__(self):
         self.data = InputData(**self.data)  # type: ignore
+
+
+@dataclass
+class Output:
+    title: str
+    type: str
+    detail: str
+    runtime: int
+    allocations: Allocation = field(default_factory=dict)

@@ -1,5 +1,5 @@
-from enum import Enum, IntEnum
 from dataclasses import dataclass, field
+from enum import Enum, IntEnum
 
 
 SessionId = StaffId = str
@@ -33,10 +33,19 @@ class IsoDay(IntEnum):
     SUN = 7
 
 
+class AllocationStatus(StrEnum):
+    REQUESTED = "REQUESTED"
+    NOT_READY = "NOT_READY"
+    NOT_EXIST = "NOT_EXIST"
+    ERROR = "ERROR"
+    GENERATED = "GENERATED"
+    FAILED = "FAILED"
+
+
 @dataclass
-class Output:
-    status: str
-    type: str
-    detail: str
+class AllocationOutput:
+    title: str
+    type: AllocationStatus
+    message: str
     runtime: int
-    allocations: Allocation = field(default_factory=dict)
+    result: dict = field(default_factory=dict)

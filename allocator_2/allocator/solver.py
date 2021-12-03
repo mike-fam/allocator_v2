@@ -5,24 +5,6 @@ from gurobipy.gurobipy import GRB, quicksum, Model, abs_, max_
 
 from .schema import *
 
-# Used for preference constraint. E.g. 0.8 means, if a tutor's preference is
-# practical sessions, they'll get AT LEAST 4 hours of practicals for every hour
-# of any other session. Higher values may lead to infeasibility, value must be
-# > 1/types_num for preferencing to work, where types_num is the number of
-# session types (e.g. 2 if session types include Prac and Tute)
-from .type_hints import SessionId
-
-DEFAULT_PREFERENCE_THRESHOLD = {
-    SessionType.PRACTICAL: 0,
-    SessionType.TUTORIAL: 0,
-}
-
-# Used for seniority constraint. Generally new staff should get fewer hours
-# than senior staff. # A value of 0.5 means every new staff should get AROUND
-# half the number of hours compared to a senior tutor. Value must be >= 0 and
-# <= 1.
-DEFAULT_NEW_THRESHOLD = 1
-
 
 def lazy_constraints(vars_dict, *constraints):
     def callback(model, where):
@@ -47,8 +29,7 @@ class Solver:
         tutors: list[Staff],
         session_streams: list[SessionStream],
         weeks: list[Week],
-        new_threshold: float = None,
-        preference_threshold=None,
+        new_threshold: float = 1,
         timeout=3600,
     ):
 
@@ -65,19 +46,9 @@ class Solver:
                     self._week_sessions[week] = []
                 self._week_sessions[week].append(session_stream)
 
-        if new_threshold is None:
-            new_threshold = DEFAULT_NEW_THRESHOLD
-        self._new_threshold = new_threshold
-
-        if preference_threshold is None:
-            preference_threshold = DEFAULT_PREFERENCE_THRESHOLD
-        self._preference_threshold = preference_threshold
-
         self._model = Model()
         self._model.setParam("LazyConstraints", 1)
         self._model.setParam("TimeLimit", timeout)  # Run for at most 30 minutes
-        self._model.setParam("NonConvex", 2)  # For quadratic variance
-        self._model.setParam("DualReductions", 0)
         # self._model.Params.LogToConsole = 0
 
         self._allocation_var = {}
@@ -96,7 +67,7 @@ class Solver:
         self._results: dict[str, list[str]] = {
             session_stream_id: [] for session_stream_id in self._session_streams
         }
-        print("starting timer")
+        self._new_threshold = new_threshold
         self._start_time = time.time()
 
     def add_tutors(self, *tutors: Staff):
@@ -110,9 +81,6 @@ class Solver:
 
     def add_weeks(self, *weeks: Week):
         self._weeks.update((week.id, week) for week in weeks)
-
-    def change_new_threshold(self, new_threshold: float):
-        self._new_threshold = new_threshold
 
     def _setup_variables(self):
         self._setup_allocation_var()
@@ -130,7 +98,6 @@ class Solver:
         self._setup_tutor_availability_constraint()
         self._setup_seniority_for_session_constraint()
         self._setup_maximum_weekly_hours_constraint()
-        self._setup_preference_hour_constraint()
 
     def _setup_allocation_var(self):
         self._allocation_var = {
@@ -230,25 +197,6 @@ class Solver:
                 <= session_stream.number_of_tutors
             )
 
-    def _setup_preference_hour_constraint(self):
-        """Tutors should work more in their preferred session type"""
-        # sum preference hours >= self._preference_threshold * sum all hours
-        for tutor_id, tutor in self._tutors.items():
-            if tutor.type_preference is None:
-                continue
-            self._model.addConstr(
-                quicksum(
-                    self._allocation_var[tutor_id, session_stream_id]
-                    for session_stream_id, session_stream in self._session_streams.items()
-                    if tutor.type_preference == session_stream.type
-                )
-                >= self._preference_threshold[tutor.type_preference]
-                * quicksum(
-                    self._allocation_var[tutor_id, session_stream_id]
-                    for session_stream_id in self._session_streams
-                )
-            )
-
     def _setup_contiguous_hours_constraint(
         self, model, allocation_vars, allocation_solution
     ):
@@ -340,20 +288,23 @@ class Solver:
                     )
                     <= tutor.max_weekly_hours
                 )
-            # self._model.addConstr(
-            #     quicksum(self._allocation_var[tutor_id, session_stream_id] *
-            #              session_stream.time.duration()
-            #              for session_stream_id, session_stream in
-            #              self._session_streams.items()) <=
-            #     tutor.max_weekly_hours
-            # )
 
-    def _setup_objective(self):
-        """
-        We want to minimize the variance, so people will have maximum spread.
-        Weights for new staff will be accounted here.
-        """
-        # dict containing total number of allocated hours of every tutor
+    def _setup_allocated_hours_objective(self):
+        """Minimises the number of unallocated hours"""
+        unallocated_hours = quicksum(
+            stream.number_of_tutors * stream.total_hours()
+            - quicksum(
+                self._allocation_var[tutor_id, stream.id]
+                for tutor_id in self._tutors
+            )
+            * stream.total_hours()
+            for stream in self._session_streams.values()
+        )
+        self._model.setObjectiveN(unallocated_hours, 0, priority=2)
+
+    def _setup_spread_objective(self):
+        """Minimises spread between tutors"""
+        # Total hours for each tutor
         total_hours = {
             tutor_id: quicksum(
                 self._allocation_var[tutor_id, session_stream_id]
@@ -365,13 +316,17 @@ class Solver:
             )
             for tutor_id, tutor in self._tutors.items()
         }
+
         # mean of number of allocated hours for every tutor
-        mean_hours = sum(
-            session_stream.time.duration()
-            * session_stream.number_of_tutors
-            * len(session_stream.weeks)
-            for session_stream in self._session_streams.values()
-        ) / len(self._tutors)
+        try:
+            mean_hours = sum(
+                session_stream.time.duration()
+                * session_stream.number_of_tutors
+                * len(session_stream.weeks)
+                for session_stream in self._session_streams.values()
+            ) / len(self._tutors)
+        except ZeroDivisionError:
+            raise RuntimeError("You must provide at least 1 tutor")
 
         # Difference between allocated hours and mean hours for every tutor
         differences = {
@@ -388,29 +343,31 @@ class Solver:
                 total_hours[tutor_id] - differences[tutor_id] == mean_hours
             )
             self._model.addConstr(
-                variance[tutor_id]
-                == differences[tutor_id] * differences[tutor_id]
+                variance[tutor_id] == abs_(differences[tutor_id])
             )
-
-        self._model.ModelSense = GRB.MINIMIZE
-
-        # minimize amount of unallocated hours
-        unallocated_hours = quicksum(
-            stream.number_of_tutors * stream.total_hours()
-            - quicksum(
-                self._allocation_var[tutor_id, stream.id]
-                for tutor_id in self._tutors
-            )
-            * stream.total_hours()
-            for stream in self._session_streams.values()
-        )
-        self._model.setObjectiveN(unallocated_hours, 0, priority=2)
 
         # Minimize absolute variances between tutors
         spread = quicksum(variance[tutor_id] for tutor_id in self._tutors)
-        self._model.setObjectiveN(spread, 1, priority=1)
+        self._model.setObjectiveN(spread, 2, priority=1)
 
-        # Minimize number of days tutors have to go to work
+    def _setup_preference_hour_objective(self):
+        """Tutors should work more in their preferred session type"""
+        # TODO: Maybe maximise number of hours that is preferred
+        self._model.setObjectiveN(
+            quicksum(
+                self._allocation_var[tutor_id, session_stream_id]
+                * session_stream.total_hours()
+                * int(session_stream.type != tutor.type_preference)
+                for session_stream_id, session_stream in self._session_streams.items()
+                for tutor_id, tutor in self._tutors.items()
+                if tutor.type_preference is not None
+            ),
+            1,
+            priority=1,
+        )
+
+    def _setup_workday_objective(self):
+        """Minimises number of days everyone has to go to work"""
         self._model.setObjectiveN(
             quicksum(
                 self._tutor_on_day_var[tutor_id, day_id, week]
@@ -418,9 +375,21 @@ class Solver:
                 for day_id in self._days
                 for week in self._weeks
             ),
-            2,
+            3,
             priority=0,
         )
+
+    def _setup_objective(self):
+        """
+        We want to minimize the variance, so people will have maximum spread.
+        Weights for new staff will be accounted here.
+        """
+        # dict containing total number of allocated hours of every tutor
+        self._model.ModelSense = GRB.MINIMIZE
+        self._setup_allocated_hours_objective()
+        self._setup_spread_objective()
+        self._setup_preference_hour_objective()
+        self._setup_workday_objective()
 
     def solve(self, output_log_file=""):
         self._setup_data()
@@ -443,7 +412,8 @@ class Solver:
             for session_stream_id in self._session_streams:
                 if self._allocation_var[tutor_id, session_stream_id].x > 0.99:
                     print(
-                        f"Tutor {self._tutors[tutor_id]} works on {self._session_streams[session_stream_id]}"
+                        f"Tutor {self._tutors[tutor_id]} works on "
+                        f"{self._session_streams[session_stream_id]}"
                     )
                     self._results[session_stream_id].append(tutor_id)
 
