@@ -2,8 +2,7 @@ import json
 import time
 import argparse
 import traceback
-from datetime import datetime
-from typing import Optional
+from django.utils import timezone
 
 from allocator.constants import (
     FAILURE_TITLE,
@@ -31,13 +30,14 @@ class Allocator:
             timeout=self._input_data.timeout,
         )
         grb_status = solver.solve()
+        runtime = int(time.time() - start_time)
         allocations = {}
 
         if grb_status == GRB.OPTIMAL or grb_status == GRB.TIME_LIMIT:
             title = GENERATED_TITLE
             allocations = solver.get_results()
             message = GENERATED_MESSAGE.format(
-                runtime=datetime.now().strftime("%I:%M %p on %d %b %Y")
+                runtime=runtime
             )
             status = AllocationStatus.GENERATED
         elif grb_status == GRB.INTERRUPTED:
@@ -51,7 +51,7 @@ class Allocator:
             title,
             status,
             message,
-            int(time.time() - start_time),
+            runtime,
             result=allocations,
         )
 
