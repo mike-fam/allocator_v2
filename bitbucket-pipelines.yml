@@ -13,7 +13,6 @@ pipelines:
       - step:
           name: 'Deployment to Production'
           deployment: production
-          trigger: 'manual'
           script:
             - chmod +x ./scripts/production/deploy.sh
             - ./scripts/production/deploy.sh
