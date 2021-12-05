@@ -37,6 +37,8 @@ def _replace_existing_allocation(
         target=_run_allocation, args=(allocator, timetable_id)
     )
     new_process.start()
+    if new_timeout is not None:
+        allocation_state.timeout = new_timeout
     allocation_state.pid = new_process.pid
     allocation_state.result = None
     allocation_state.type = AllocationStatus.REQUESTED
@@ -45,8 +47,6 @@ def _replace_existing_allocation(
     )
     allocation_state.title = "Allocation Successfully Requested"
     allocation_state.request_time = timezone.now()
-    if new_timeout is not None:
-        allocation_state.timeout = new_timeout
     allocation_state.save()
 
 
