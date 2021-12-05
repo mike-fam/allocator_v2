@@ -19,3 +19,10 @@ REQUESTED_MESSAGE = (
     "Allocation successfully requested. Estimated time "
     "remaining: {eta} seconds."
 )
+
+KILLED_TITLE = "Allocation Process Killed"
+KILLED_MESSAGE = (
+    "For some reason the allocation process quit unexpectedly. "
+    "This might be because of a server restart. Please request " 
+    "a new allocation. We're sorry for the inconvenience."
+)
