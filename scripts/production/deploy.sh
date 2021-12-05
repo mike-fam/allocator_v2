@@ -15,7 +15,7 @@ pullAndDeploy() {
   git pull
   /var/www/uwsgi/tutor-allocate/venv/bin/pip install -r requirements.txt
   /var/www/uwsgi/tutor-allocate/venv/bin/python allocator_2/manage.py migrate
-	echo "$UQ_PW" | sudo -S systemctl restart allocator-uwsgi
+	echo "$UQ_PW" | sudo -S systemctl restart uwsgi-allocator
 	history -c
 }
 
