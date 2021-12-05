@@ -84,7 +84,7 @@ def request_allocation(request):
                     - timezone.now().timestamp()
                 )
                 allocation_state.message = allocation_state.message.format(
-                    eta=eta
+                    eta=max(eta, 0)
                 )
             elif allocation_state.type == AllocationStatus.ERROR:
                 _replace_existing_allocation(
@@ -112,7 +112,6 @@ def request_allocation(request):
             message=REQUESTED_MESSAGE,
         )
         allocation_state.save()
-        print(allocation_state.message)
         allocation_state.message = allocation_state.message.format(
             eta=data.timeout
         )
@@ -148,7 +147,9 @@ def check_allocation(request, timetable_id):
                 + allocation_state.timeout
                 - timezone.now().timestamp()
             )
-            allocation_state.message = allocation_state.message.format(eta=eta)
+            allocation_state.message = allocation_state.message.format(
+                eta=max(eta, 0)
+            )
         return JsonResponse(
             {
                 "type": allocation_state.type,
