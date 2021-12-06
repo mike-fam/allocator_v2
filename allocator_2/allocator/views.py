@@ -22,6 +22,15 @@ from .schema import InputData
 from .models import AllocationState
 
 
+def _seconds_to_time(seconds: int) -> str:
+    if seconds < 120:
+        return f"{seconds} seconds"
+    elif seconds < 7200:
+        return f"{int(seconds / 60)} minutes"
+    else:
+        return f"{int(seconds / 3600)} hours"
+
+
 def _replace_existing_allocation(
     allocation_state: AllocationState,
     allocator: Allocator,
@@ -43,7 +52,7 @@ def _replace_existing_allocation(
     allocation_state.result = None
     allocation_state.type = AllocationStatus.REQUESTED
     allocation_state.message = REQUESTED_MESSAGE.format(
-        eta=allocation_state.timeout
+        time=_seconds_to_time(allocation_state.timeout)
     )
     allocation_state.title = "Allocation Successfully Requested"
     allocation_state.request_time = timezone.now()
@@ -84,7 +93,7 @@ def request_allocation(request):
                     - timezone.now().timestamp()
                 )
                 allocation_state.message = allocation_state.message.format(
-                    eta=max(eta, 0)
+                    time=_seconds_to_time(max(eta, 0))
                 )
             elif allocation_state.type == AllocationStatus.ERROR:
                 _replace_existing_allocation(
@@ -113,7 +122,7 @@ def request_allocation(request):
         )
         allocation_state.save()
         allocation_state.message = allocation_state.message.format(
-            eta=data.timeout
+            time=_seconds_to_time(data.timeout)
         )
     return JsonResponse(
         {
@@ -152,7 +161,7 @@ def check_allocation(request, timetable_id):
                 - timezone.now().timestamp()
             )
             allocation_state.message = allocation_state.message.format(
-                eta=max(eta, 0)
+                time=_seconds_to_time(max(eta, 0))
             )
         elif not psutil.pid_exists(allocation_state.pid):
             allocation_state.type = AllocationStatus.ERROR

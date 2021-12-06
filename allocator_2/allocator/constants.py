@@ -11,13 +11,13 @@ FAILURE_MESSAGE = (
 NOT_READY_TITLE = "Allocation Already Requested"
 NOT_READY_MESSAGE = (
     "Allocation is already running and is not yet ready.\n"
-    "Estimated time remaining: {eta} seconds."
+    "Estimated time remaining: {time}."
 )
 
 REQUESTED_TITLE = "Allocation Successfully Requested"
 REQUESTED_MESSAGE = (
     "Allocation successfully requested. Estimated time "
-    "remaining: {eta} seconds."
+    "remaining: {time}."
 )
 
 KILLED_TITLE = "Allocation Process Killed"
