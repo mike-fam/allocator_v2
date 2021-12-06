@@ -22,15 +22,7 @@ from .type_hints import AllocationStatus
 from .allocation import Allocator, _run_allocation
 from .schema import InputData
 from .models import AllocationState
-
-
-def _seconds_to_time(seconds: int) -> str:
-    if seconds < 120:
-        return f"{seconds} seconds"
-    elif seconds < 7200:
-        return f"{int(seconds / 60)} minutes"
-    else:
-        return f"{int(seconds / 3600)} hours"
+from .utils import seconds_to_eta
 
 
 def _replace_existing_allocation(
@@ -38,7 +30,7 @@ def _replace_existing_allocation(
     allocator: Allocator,
     timetable_id: str,
     new_timeout: Optional[int] = None,
-):
+) -> None:
     try:
         proc = psutil.Process(pid=allocation_state.pid)
         proc.terminate()
@@ -54,7 +46,7 @@ def _replace_existing_allocation(
     allocation_state.result = None
     allocation_state.type = AllocationStatus.REQUESTED
     allocation_state.message = REQUESTED_MESSAGE.format(
-        time=_seconds_to_time(allocation_state.timeout)
+        time=seconds_to_eta(allocation_state.timeout)
     )
     allocation_state.title = "Allocation Successfully Requested"
     allocation_state.request_time = timezone.now()
@@ -95,7 +87,7 @@ def request_allocation(request):
                     - timezone.now().timestamp()
                 )
                 allocation_state.message = allocation_state.message.format(
-                    time=_seconds_to_time(max(eta, 0))
+                    time=seconds_to_eta(max(eta, 0))
                 )
             elif allocation_state.type == AllocationStatus.ERROR:
                 _replace_existing_allocation(
@@ -124,7 +116,7 @@ def request_allocation(request):
         )
         allocation_state.save()
         allocation_state.message = allocation_state.message.format(
-            time=_seconds_to_time(data.timeout)
+            time=seconds_to_eta(data.timeout)
         )
     return JsonResponse(
         {
@@ -160,7 +152,7 @@ def check_allocation(request, timetable_id):
                     - timezone.now().timestamp()
                 )
                 allocation_state.message = allocation_state.message.format(
-                    time=_seconds_to_time(max(eta, 0))
+                    time=seconds_to_eta(max(eta, 0))
                 )
             else:
                 # For some reason cannot find pid, maybe process was killed

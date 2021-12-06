@@ -2,7 +2,8 @@ import json
 import time
 import argparse
 import traceback
-from django.utils import timezone
+
+from gurobipy.gurobipy import GRB
 
 from allocator.constants import (
     FAILURE_TITLE,
@@ -10,11 +11,10 @@ from allocator.constants import (
     GENERATED_MESSAGE,
     GENERATED_TITLE,
 )
+from allocator.utils import seconds_to_time
 from .type_hints import AllocationStatus, AllocationOutput
 from .schema import InputData
 from .solver import Solver
-
-from gurobipy.gurobipy import GRB
 
 
 class Allocator:
@@ -36,7 +36,7 @@ class Allocator:
         if grb_status == GRB.OPTIMAL or grb_status == GRB.TIME_LIMIT:
             title = GENERATED_TITLE
             allocations = solver.get_results()
-            message = GENERATED_MESSAGE.format(runtime=runtime)
+            message = GENERATED_MESSAGE.format(runtime=seconds_to_time(runtime))
             status = AllocationStatus.GENERATED
         elif grb_status == GRB.INTERRUPTED:
             raise KeyboardInterrupt("Allocation process was interrupted")

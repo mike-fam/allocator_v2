@@ -1,5 +1,5 @@
 GENERATED_TITLE = "Allocation Successfully Generated"
-GENERATED_MESSAGE = "Allocation successfully generated after {runtime} seconds."
+GENERATED_MESSAGE = "Allocation successfully generated after {runtime}."
 
 FAILURE_TITLE = "Allocation Failure"
 FAILURE_MESSAGE = (
