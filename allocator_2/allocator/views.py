@@ -14,7 +14,9 @@ from .constants import (
     REQUESTED_MESSAGE,
     REQUESTED_TITLE,
     NOT_READY_TITLE,
-    NOT_READY_MESSAGE, KILLED_TITLE, KILLED_MESSAGE,
+    NOT_READY_MESSAGE,
+    KILLED_TITLE,
+    KILLED_MESSAGE,
 )
 from .type_hints import AllocationStatus
 from .allocation import Allocator, _run_allocation
@@ -141,33 +143,31 @@ def check_allocation(request, timetable_id):
             timetable_id=timetable_id
         )
         # Request has been made
-        if (
-            allocation_state.type
-            in (
-                AllocationStatus.REQUESTED,
-                AllocationStatus.NOT_READY,
-            )
-            and psutil.pid_exists(allocation_state.pid)
+        if allocation_state.type in (
+            AllocationStatus.REQUESTED,
+            AllocationStatus.NOT_READY,
         ):
-            # Result not found yet, allocation still running
-            if allocation_state.type == AllocationStatus.REQUESTED:
-                allocation_state.type = AllocationStatus.NOT_READY
-                allocation_state.title = NOT_READY_TITLE
-                allocation_state.message = NOT_READY_MESSAGE
+            if psutil.pid_exists(allocation_state.pid):
+                # Result not found yet, allocation still running
+                if allocation_state.type == AllocationStatus.REQUESTED:
+                    allocation_state.type = AllocationStatus.NOT_READY
+                    allocation_state.title = NOT_READY_TITLE
+                    allocation_state.message = NOT_READY_MESSAGE
+                    allocation_state.save()
+                eta = int(
+                    allocation_state.request_time.timestamp()
+                    + allocation_state.timeout
+                    - timezone.now().timestamp()
+                )
+                allocation_state.message = allocation_state.message.format(
+                    time=_seconds_to_time(max(eta, 0))
+                )
+            else:
+                # For some reason cannot find pid, maybe process was killed
+                allocation_state.type = AllocationStatus.ERROR
+                allocation_state.title = KILLED_TITLE
+                allocation_state.message = KILLED_MESSAGE
                 allocation_state.save()
-            eta = int(
-                allocation_state.request_time.timestamp()
-                + allocation_state.timeout
-                - timezone.now().timestamp()
-            )
-            allocation_state.message = allocation_state.message.format(
-                time=_seconds_to_time(max(eta, 0))
-            )
-        elif not psutil.pid_exists(allocation_state.pid):
-            allocation_state.type = AllocationStatus.ERROR
-            allocation_state.title = KILLED_TITLE
-            allocation_state.message = KILLED_MESSAGE
-            allocation_state.save()
         return JsonResponse(
             {
                 "type": allocation_state.type,

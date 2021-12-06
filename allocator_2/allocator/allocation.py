@@ -36,9 +36,7 @@ class Allocator:
         if grb_status == GRB.OPTIMAL or grb_status == GRB.TIME_LIMIT:
             title = GENERATED_TITLE
             allocations = solver.get_results()
-            message = GENERATED_MESSAGE.format(
-                runtime=runtime
-            )
+            message = GENERATED_MESSAGE.format(runtime=runtime)
             status = AllocationStatus.GENERATED
         elif grb_status == GRB.INTERRUPTED:
             raise KeyboardInterrupt("Allocation process was interrupted")
