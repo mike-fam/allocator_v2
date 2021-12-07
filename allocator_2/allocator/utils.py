@@ -8,9 +8,9 @@ def seconds_to_eta(seconds: int) -> str:
 
 
 def plural(noun: str, amount: int) -> str:
-    if amount > 1:
-        return f"{noun}s"
-    return noun
+    if amount > 1 or amount == 0:
+        return f"{amount} {noun}s"
+    return f"{amount} {noun}"
 
 
 def seconds_to_time(seconds: int) -> str:
@@ -19,9 +19,9 @@ def seconds_to_time(seconds: int) -> str:
     hours = seconds // 3600
     str_time = ""
     if hours > 0:
-        str_time += plural("hours", hours)
+        str_time += f"{plural('hour', hours)} "
     if minute_remainder > 0:
-        str_time += plural("minutes", minute_remainder)
+        str_time += f"{plural('minute', minute_remainder)} "
     if second_remainder > 0:
-        str_time += plural("second_remainder", second_remainder)
+        str_time += f"{plural('second', second_remainder)}"
     return str_time
