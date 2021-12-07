@@ -23,5 +23,5 @@ def seconds_to_time(seconds: int) -> str:
     if minute_remainder > 0:
         str_time += f"{plural('minute', minute_remainder)} "
     if second_remainder > 0:
-        str_time += f"{plural('second', second_remainder)}"
+        str_time += plural("second", second_remainder)
     return str_time
