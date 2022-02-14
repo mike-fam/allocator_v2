@@ -51,8 +51,14 @@ class Solver:
         self._model.setParam("TimeLimit", timeout)  # Run for at most 30 minutes
         # self._model.Params.LogToConsole = 0
 
+        # (tutor, stream): BINARY
         self._allocation_var = {}
+
+        # (tutor, day, week): BINARY
         self._tutor_on_day_var = {}
+
+        # (stream): BINARY
+        self._stream_allocation_var = {}
 
         self._clashing_session_data = {}
 
@@ -85,6 +91,7 @@ class Solver:
     def _setup_variables(self):
         self._setup_allocation_var()
         self._setup_tutor_on_day_var()
+        self._setup_stream_allocation_var()
         print("Finish setting up vars after", time.time() - self._start_time)
 
     def _setup_data(self):
@@ -92,9 +99,13 @@ class Solver:
         print("Finish setting up data after", time.time() - self._start_time)
 
     def _setup_constraints(self):
+        # Variable constraints
+        self._setup_tutor_on_day_var_constraint()
+        self._setup_tutor_on_stream_var_constraint()
+
+        # Logic/Rule constraints
         self._setup_allocation_collision_constraint()
         self._setup_number_of_tutors_constraint()
-        self._setup_tutor_on_day_constraint()
         self._setup_tutor_availability_constraint()
         self._setup_seniority_for_session_constraint()
         self._setup_maximum_weekly_hours_constraint()
@@ -114,6 +125,12 @@ class Solver:
             for week in self._weeks
         }
 
+    def _setup_stream_allocation_var(self):
+        self._stream_allocation_var = {
+            stream_id: self._model.addVar(vtype=GRB.BINARY)
+            for stream_id in self._session_streams
+        }
+
     def _setup_clashing_session_data(self):
         """Set up session data dictionary, 1 if session runs at a time,
         0 otherwise"""
@@ -128,7 +145,7 @@ class Solver:
             )
         }
 
-    def _setup_tutor_on_day_constraint(self):
+    def _setup_tutor_on_day_var_constraint(self):
         self._model.addConstrs(
             self._tutor_on_day_var[
                 tutor_id, self._session_streams[stream_id].day, week
@@ -138,6 +155,14 @@ class Solver:
             for stream_id in self._session_streams
             for tutor_id in self._tutors
             for week in self._weeks
+        )
+
+    def _setup_tutor_on_stream_var_constraint(self):
+        self._model.addConstrs(
+            self._stream_allocation_var[stream_id] >=
+            self._allocation_var[tutor_id, stream_id]
+            for tutor_id in self._tutors
+            for stream_id in self._session_streams
         )
 
     def _setup_seniority_for_session_constraint(self):
@@ -379,6 +404,17 @@ class Solver:
             priority=0,
         )
 
+    def _setup_unallocated_sessions_objective(self):
+        """Minimises number of unallocated sessions"""
+        self._model.setObjectiveN(
+            quicksum(
+                self._stream_allocation_var[stream_id]
+                for stream_id in self._session_streams
+            ),
+            4,
+            priority=0,
+        )
+
     def _setup_objective(self):
         """
         We want to minimize the variance, so people will have maximum spread.
@@ -386,6 +422,9 @@ class Solver:
         """
         # dict containing total number of allocated hours of every tutor
         self._model.ModelSense = GRB.MINIMIZE
+        # TODO: For now unallocated sessions goes before unallocated hours,
+        #  in the future maybe give this choice to the user
+        self._setup_unallocated_sessions_objective()
         self._setup_allocated_hours_objective()
         self._setup_spread_objective()
         self._setup_preference_hour_objective()
