@@ -168,6 +168,8 @@ class Solver:
     def _setup_seniority_for_session_constraint(self):
         """Each session has to have a least 1 senior tutor if possible"""
         for stream_id, stream in self._session_streams.items():
+            if not stream.is_root:
+                continue
             self._model.addConstr(
                 quicksum(
                     self._allocation_var[tutor_id, stream_id]

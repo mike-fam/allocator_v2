@@ -136,6 +136,7 @@ class SessionStream:
     day: IsoDay
     number_of_tutors: int
     location: str
+    is_root: bool
     time: Timeslot = None
     weeks: List[WeekId] = field(default_factory=list)
 
